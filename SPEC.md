@@ -39,8 +39,9 @@ client (app) ──►│ pg-bouncer  (stable IP 10.x.x.10)    │
                 │                                      │
 pg_restore  ──►│  :5432 ── active   ini  ─┐            │
                 │  :5433 ── staging  ini  ─┼─ cross    │
-                │                          │  connect  │
-                │  admin :6432 / :6433     │           │
+                │  (admin is the special   │  connect  │
+                │   `pgbouncer` db on same │           │
+                │   port, pgb_admin user)  │           │
                 └──────────────┬───────────┴───────────┘
                                │
                   ┌────────────┴────────────┐
@@ -55,10 +56,14 @@ pg_restore  ──►│  :5432 ── active   ini  ─┐            │
 
 - `pg-bouncer` — single container, fixed identity, lives for the life of the
   colima VM. Hosts two pgbouncer instances:
-  - **active**  — `listen_port=5432`, admin `6432`, `[databases] $PG_DB` →
-    whichever backend is currently active.
-  - **staging** — `listen_port=5433`, admin `6433`, `[databases] $PG_DB` →
-    the *other* backend.
+  - **active**  — `listen_port=5432`, `[databases] $PG_DB` → whichever
+    backend is currently active.
+  - **staging** — `listen_port=5433`, `[databases] $PG_DB` → the *other*
+    backend.
+
+  pgbouncer has no separate admin port: admin commands are issued by
+  connecting to the special `pgbouncer` virtual database on the same
+  `listen_port` as the `pgb_admin` user.
   Both `.ini` files are rendered from the single state file `var/active-slot`,
   so they are always cross-connected and cannot drift.
 - `pg-dev-a`, `pg-dev-b` — symmetric backends, both long-lived, both running.
@@ -104,10 +109,15 @@ Single guiding principle: **set up `.pgpass` once, never touch it again.**
 - Both pgbouncer pools run in **session** mode — preserves prepared
   statements, `SET`, advisory locks; behaves indistinguishably from a direct
   connection from the client's point of view.
-- Each pgbouncer's admin interface is exposed only on `127.0.0.1` inside the
-  bouncer container (`:6432` active, `:6433` staging). Reachable via
-  `incus exec pg-bouncer -- psql …` for promote/observability. Not exposed
-  to the host.
+- Each pgbouncer's admin interface is the special `pgbouncer` virtual
+  database on its own `listen_port` (`:5432` for active, `:5433` for
+  staging), accessed by connecting as `pgb_admin` (declared in
+  `admin_users` and listed in `userlist.txt`). Promote and observability
+  go through `incus exec pg-bouncer -- psql -p {5432,5433} -U pgb_admin
+  -d pgbouncer …`.
+- The `pgb_admin` user shares the application user's password. One secret,
+  one `.pgpass` line — dev convenience, explicit non-goal w.r.t. privilege
+  separation.
 - Backend Postgres `pg_hba.conf` accepts the role from the bouncer's IP and
   from the local socket. No host-wide open auth.
 
@@ -262,12 +272,13 @@ decision for shell tooling).
 
 1. Read `var/active-slot`, derive the new `(active, staging)` pair (a/b
    swapped).
-2. `_bouncer_admin 6432 "PAUSE $PG_DB;"` and
-   `_bouncer_admin 6433 "PAUSE $PG_DB;"`.
+2. `_bouncer_admin active "PAUSE $PG_DB;"` and
+   `_bouncer_admin staging "PAUSE $PG_DB;"`.
 3. Re-render both `.ini` files from the new state, from the same shared
    template. They remain cross-connected by construction.
-4. `_bouncer_admin 6432 "RELOAD; RESUME $PG_DB;"` and
-   `_bouncer_admin 6433 "RELOAD; RESUME $PG_DB;"`.
+4. `_bouncer_admin active "RELOAD;"` / `_bouncer_admin staging "RELOAD;"` and
+   `_bouncer_admin active "RESUME $PG_DB;"` /
+   `_bouncer_admin staging "RESUME $PG_DB;"`.
 5. Atomically write the new value of `var/active-slot`.
 6. Print new status.
 
