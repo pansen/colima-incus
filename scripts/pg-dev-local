@@ -111,7 +111,7 @@ admin_users = pgb_admin
 stats_users = pgb_admin
 pool_mode = session
 server_reset_query = DISCARD ALL
-ignore_startup_parameters = extra_float_digits
+ignore_startup_parameters = extra_float_digits,statement_timeout,lock_timeout,idle_in_transaction_session_timeout,search_path,default_transaction_isolation,default_transaction_read_only,default_transaction_deferrable
 logfile = /var/log/pgbouncer/${role}.log
 pidfile = /var/run/pgbouncer/${role}.pid
 EOF
@@ -502,6 +502,18 @@ cmd_bouncer_logs() {
         tail -f /var/log/pgbouncer/active.log /var/log/pgbouncer/staging.log
 }
 
+cmd_bouncer_reload() {
+    # Re-render both inis from the current pointer state, then RELOAD both
+    # pgbouncer instances. Useful after a config change to _render_ini.
+    local a s
+    a=$(_active); s=$(_staging)
+    _render_ini active  5432 "${BACKEND_PREFIX}-${a}"
+    _render_ini staging 5433 "${BACKEND_PREFIX}-${s}"
+    _bouncer_admin active  "RELOAD;" >/dev/null
+    _bouncer_admin staging "RELOAD;" >/dev/null
+    echo "Reloaded pgbouncer@active and pgbouncer@staging."
+}
+
 # ---------------------------------------------------------------------------
 # Export / import (operate on the active backend)
 # ---------------------------------------------------------------------------
@@ -573,6 +585,7 @@ Staging slot (the other one):
 
 Bouncer:
   bouncer.logs                    tail both pgbouncer logs
+  bouncer.reload                  re-render both inis from state and RELOAD
 
 Export / import (act on the active backend):
   export                          export active backend to var/<name>-<ts>.tar.gz
@@ -607,6 +620,7 @@ case "${1:-}" in
     staging.reset)        shift; cmd_staging_reset "$@" ;;
 
     bouncer.logs)   shift; cmd_bouncer_logs "$@" ;;
+    bouncer.reload) shift; cmd_bouncer_reload "$@" ;;
 
     export)         shift; cmd_export "$@" ;;
     import-last)    shift; cmd_import_last "$@" ;;

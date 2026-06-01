@@ -129,6 +129,10 @@ pg.staging.reset:
 pg.bouncer.logs:
 	$(PG_DEV) bouncer.logs
 
+.PHONY: pg.bouncer.reload
+pg.bouncer.reload:
+	$(PG_DEV) bouncer.reload
+
 # ----- export / import (active backend) -----------------------------------
 
 .PHONY: pg.export
