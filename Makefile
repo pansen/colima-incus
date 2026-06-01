@@ -95,10 +95,6 @@ pg.staging.psql:
 pg.staging.shell:
 	$(PG_DEV) staging.shell
 
-.PHONY: pg.staging.ip
-pg.staging.ip:
-	@$(PG_DEV) staging.ip
-
 .PHONY: pg.staging.logs
 pg.staging.logs:
 	$(PG_DEV) staging.logs
@@ -114,10 +110,6 @@ pg.staging.restore:
 .PHONY: pg.staging.restore-last
 pg.staging.restore-last:
 	$(PG_DEV) staging.restore-last
-
-.PHONY: pg.staging.snapshots
-pg.staging.snapshots:
-	$(PG_DEV) staging.snapshots
 
 .PHONY: pg.staging.reset
 pg.staging.reset:

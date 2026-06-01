@@ -459,7 +459,17 @@ cmd_restore() {
     _restore "$(_c_active)" "$name"
 }
 cmd_restore_last() { _restore_last "$(_c_active)"; }
-cmd_snapshots()    { incus snapshot list "$(_c_active)"; }
+
+# Unified listing for both slots.
+cmd_snapshots() {
+    local a s
+    a=$(_active); s=$(_staging)
+    echo "─── active  (${BACKEND_PREFIX}-${a}) ───"
+    incus snapshot list "${BACKEND_PREFIX}-${a}"
+    echo
+    echo "─── staging (${BACKEND_PREFIX}-${s}) ───"
+    incus snapshot list "${BACKEND_PREFIX}-${s}"
+}
 
 # staging slot
 cmd_staging_snapshot() {
@@ -471,7 +481,6 @@ cmd_staging_restore() {
     _restore "$(_c_staging)" "$name"
 }
 cmd_staging_restore_last() { _restore_last "$(_c_staging)"; }
-cmd_staging_snapshots()    { incus snapshot list "$(_c_staging)"; }
 cmd_staging_reset()        { _restore "$(_c_staging)" initial; }
 
 # Shell / psql / ip / logs, per slot.
@@ -491,8 +500,14 @@ _ip() {
         | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' \
         | head -1
 }
-cmd_ip()         { _ip "$(_c_active)"; }
-cmd_staging_ip() { _ip "$(_c_staging)"; }
+
+# Unified IPs for both slots.
+cmd_ip() {
+    local a s
+    a=$(_active); s=$(_staging)
+    printf '%-8s  %-10s  %s\n' active  "${BACKEND_PREFIX}-${a}" "$(_ip "${BACKEND_PREFIX}-${a}")"
+    printf '%-8s  %-10s  %s\n' staging "${BACKEND_PREFIX}-${s}" "$(_ip "${BACKEND_PREFIX}-${s}")"
+}
 
 cmd_logs()         { incus exec "$(_c_active)"  -- tail -f /var/log/postgresql/postgresql-17-main.log; }
 cmd_staging_logs() { incus exec "$(_c_staging)" -- tail -f /var/log/postgresql/postgresql-17-main.log; }
@@ -562,25 +577,25 @@ Lifecycle:
   endpoint                        print bouncer host/port roles + .pgpass line
   promote                         flip active↔staging on both bouncer instances
 
+Both slots (rendered side by side):
+  ip                              container IPs for active and staging
+  snapshots                       snapshot lists for active and staging
+
 Active slot (whatever is currently active):
   psql [args]                     psql via incus exec into active backend
   shell                           bash into active backend
-  ip                              active backend's container IP
   logs                            tail postgres logs on active backend
   snapshot <name> [--force]       create a snapshot on active backend
   restore <name>                  restore active backend to a snapshot
   restore-last                    restore active backend to its most recent snapshot
-  snapshots                       list snapshots on active backend
 
 Staging slot (the other one):
   staging.psql [args]
   staging.shell
-  staging.ip
   staging.logs
   staging.snapshot <name> [--force]
   staging.restore <name>
   staging.restore-last
-  staging.snapshots
   staging.reset                   shortcut: restore staging to 'initial'
 
 Bouncer:
@@ -611,12 +626,10 @@ case "${1:-}" in
 
     staging.psql)         shift; cmd_staging_psql "$@" ;;
     staging.shell)        shift; cmd_staging_shell "$@" ;;
-    staging.ip)           shift; cmd_staging_ip "$@" ;;
     staging.logs)         shift; cmd_staging_logs "$@" ;;
     staging.snapshot)     shift; cmd_staging_snapshot "$@" ;;
     staging.restore)      shift; cmd_staging_restore "$@" ;;
     staging.restore-last) shift; cmd_staging_restore_last "$@" ;;
-    staging.snapshots)    shift; cmd_staging_snapshots "$@" ;;
     staging.reset)        shift; cmd_staging_reset "$@" ;;
 
     bouncer.logs)   shift; cmd_bouncer_logs "$@" ;;
