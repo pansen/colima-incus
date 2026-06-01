@@ -501,12 +501,19 @@ _ip() {
         | head -1
 }
 
-# Unified IPs for both slots.
+# Unified port + backend view for both slots. The bouncer endpoint
+# (host:port) is the client-facing fact; the backend container name and
+# its container IP are shown for ops/debugging context.
 cmd_ip() {
-    local a s
+    local a s ip_a ip_s bouncer_ip
     a=$(_active); s=$(_staging)
-    printf '%-8s  %-10s  %s\n' active  "${BACKEND_PREFIX}-${a}" "$(_ip "${BACKEND_PREFIX}-${a}")"
-    printf '%-8s  %-10s  %s\n' staging "${BACKEND_PREFIX}-${s}" "$(_ip "${BACKEND_PREFIX}-${s}")"
+    ip_a=$(_ip "${BACKEND_PREFIX}-${a}")
+    ip_s=$(_ip "${BACKEND_PREFIX}-${s}")
+    bouncer_ip=$(_bouncer_ip)
+    printf '%-8s  %-22s  →  %-10s (%s)\n' \
+        active  "${bouncer_ip}:5432" "${BACKEND_PREFIX}-${a}" "$ip_a"
+    printf '%-8s  %-22s  →  %-10s (%s)\n' \
+        staging "${bouncer_ip}:5433" "${BACKEND_PREFIX}-${s}" "$ip_s"
 }
 
 cmd_logs()         { incus exec "$(_c_active)"  -- tail -f /var/log/postgresql/postgresql-17-main.log; }
@@ -578,7 +585,7 @@ Lifecycle:
   promote                         flip active↔staging on both bouncer instances
 
 Both slots (rendered side by side):
-  ip                              container IPs for active and staging
+  ip                              bouncer endpoint → backend, for both slots
   snapshots                       snapshot lists for active and staging
 
 Active slot (whatever is currently active):
